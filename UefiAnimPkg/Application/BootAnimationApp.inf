@@ -1,0 +1,58 @@
+## BootAnimationApp.inf -- UEFI boot animation application (7 modules + QOI decoder)
+## Output: Build\UefiAnimPkg\RELEASE_VS2022\X64\BootAnimation.efi
+## NOTE: keep this file ASCII-only (edk2 meta-file parser reads with locale encoding).
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = BootAnimation
+  FILE_GUID                      = 6B8F2A4E-0C5D-4E9F-A3B7-8D1E2F3A4B5C
+  MODULE_TYPE                    = UEFI_APPLICATION
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = UefiMain
+
+[Sources]
+  Main.c
+  Gop.c
+  Config.c
+  AnimLoad.c
+  Render.c
+  FrameRate.c
+  Input.c
+  Chainload.c
+  Qoi.c
+  UefiAnimPkg.h
+  Gop.h
+  Config.h
+  AnimLoad.h
+  Render.h
+  FrameRate.h
+  Input.h
+  Chainload.h
+  Qoi.h
+
+[Packages]
+  MdePkg/MdePkg.dec
+  UefiAnimPkg/UefiAnimPkg.dec
+
+[LibraryClasses]
+  UefiApplicationEntryPoint
+  UefiBootServicesTableLib
+  DevicePathLib
+  BaseLib
+  BaseMemoryLib
+  DebugLib
+  PcdLib
+
+[Protocols]
+  gEfiGraphicsOutputProtocolGuid
+  gEfiSimpleFileSystemProtocolGuid
+  gEfiLoadedImageProtocolGuid
+  gEfiSimpleTextInputExProtocolGuid
+
+[Guids]
+  gEfiFileInfoGuid
+
+[BuildOptions]
+  # MSVC /GL+LTCG forbids user-defined CRT helpers (C2268); the app provides
+  # memcpy/memset shims for optimizer-generated calls under /NODEFAULTLIB.
+  MSFT:*_*_*_CC_FLAGS = /GL-

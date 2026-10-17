@@ -1,0 +1,13 @@
+## UefiAnimPkg.dec -- Package definition (depends on MdePkg only)
+## Design doc v1.0 section 4.4: C:\edk2\UefiAnimPkg\
+## This package introduces no new protocol/guid/pcd; all protocols come from MdePkg.dec.
+## NOTE: keep this file ASCII-only (edk2 meta-file parser reads with locale encoding).
+
+[Defines]
+  DEC_SPECIFICATION              = 0x00010005
+  PACKAGE_NAME                   = UefiAnimPkg
+  PACKAGE_GUID                   = 9A5C1D28-3E47-4B6A-8F2D-1C0E5A7B9D31
+  PACKAGE_VERSION                = 0.10
+
+[Includes]
+  Application

@@ -1,0 +1,29 @@
+# EDK2 Build outputs
+Build/
+*.efi
+*.fd
+*.log
+Conf/
+
+# Python
+__pycache__/
+*.pyc
+
+# Animation Assets (Too large for Git)
+*.bin
+*.bmp
+*.png
+*.qoi
+
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 本地 VM 测试脚手架（QMP/QEMU 驱动，含本机环境路径，不入库）
+tools/qmp.py
+tools/test_*.py
+
+# 本地备份与报告草稿（体积/隐私原因不入库）
+esp_backup/
+*.backup

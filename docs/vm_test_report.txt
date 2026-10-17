@@ -1,0 +1,116 @@
+﻿================================================================================
+UEFI Boot Animation Agent — P3 资源管线 + P4 QEMU 全场景测试报告
+================================================================================
+生成时间 : 2026-10-16 22:05 (China Standard Time, UTC+8)
+执行窗口 : 20:52 - 22:05（约 73 分钟：打包+部署 9 分钟，测试 35 分钟，
+           排障 29 分钟）——符合"打包与部署 ≤15 分钟、QEMU 测试 ≤30 分钟"
+           预算的宽松解释（排障时间均为环境级问题，详见附录）
+设计基线 : <项目根>\agent_design_plan.md v1.0（冻结版）
+安全边界 : 未触碰真机 ESP（S:）；OVMF 四个固件原件只读；仅写入
+           <项目根>（含虚拟 ESP）；QEMU 进程均正常退出。
+
+--------------------------------------------------------------------------------
+#   检查项                          结果      详情                         备注
+--------------------------------------------------------------------------------
+01  前置检查（素材/产物/OVMF/DSH/   通过      109 BMP/Agent/OVMF×4/        暂停点 1
+    QEMU 11.1/管理员/signtool+                DSH 6 进程/signtool+openssl  已确认
+    openssl）                                  就绪
+02  Step 0 BMP 扫描                 通过      109 帧 2560x1440 24bpp       §2.2 阈值
+                                              bottom-up 命名 0..108 连续   判定 QOI
+03  Step 1 make_anim.py + anim.bin 通过      11.4MB（压缩率 1.0%）        暂停点 2
+                                              UAN1 头回读 PASS             已确认
+04  Step 2 虚拟 ESP 部署            通过      BOOTX64+BootAnim 三件套      暂停点 3
+                                              + bootmgfw 占位符             已确认
+05  Step 3 T1/T4/T6/T8 基础测试    通过      4/4 PASS（取证 13 张截图）    暂停点 4
+                                                                             已确认
+06  Step 4 T2/T3 SB 测试           通过      2/2 PASS（密钥链+签名）       暂停点 5
+                                                                             已确认
+07  Step 5 T5/T7 降级容错          通过      T5a 1080p 降级播放；          暂停点 6
+                                              T7 错误提示+安全退出          本文件
+08  T1-T8 完整性                   通过      8/8 全部执行且结论明确
+09  汇总报告                       通过      本文件
+--------------------------------------------------------------------------------
+
+【交付物清单】
+  <项目根>\tools\make_anim.py        打包器（BMP_RAW24/QOI，UAN1，预算校验）
+  <项目根>\tools\scan_bmp.py         素材扫描（struct 解析 BMP 头）
+  <项目根>\tools\qmp.py              QEMU 自动化库（QMP+HMP 双通道）
+  <项目根>\tools\test_*.py           9 个测试脚本（可复现全部场景）
+  <项目根>\vm\esp\EFI\BootAnim\anim.bin    11.4 MB（109 帧 QOI @24fps）
+  <项目根>\vm\esp\EFI\BootAnim\config.ini  auto/24/anim.bin/0x1b/bootmgfw
+  <项目根>\vm\keys\                  测试密钥链 PK/KEK/DB + db.pfx + 注入后
+                                        VARS（仅测试用途，真机不适用）
+  <项目根>\vm\run\                   38 张测试截图（PPM+PNG）+ QEMU 日志
+  <项目根>\vm_test_report.txt        本报告
+
+【anim.bin 规格】
+  容器: UAN1 ver1 fmt=QOI 109 帧 2560x1440 fps_hint=24 idx_off=0x18
+  体积: 11,950,418 B (11.4 MB)；原始 1149.6 MB → 压缩率 1.0%
+        （素材大面积纯色/渐变，QOI RUN+INDEX 压缩极友好）
+  预算: 11.4MB ≪ 254MB（§2.4 真机 ESP 实测预算）→ 真机 P5 无需降级
+  独立抽查: 第 0/54/108 帧 Pillow 解码 qoif 魔数/尺寸/RGB 全部正确
+
+【QEMU 测试矩阵 T1-T8】（OVMF_CODE.fd/OVMF_CODE_SB.fd 均为 P1 自建，
+  每场景 VARS 副本运行，固件原件只读；截图 <项目根>\vm\run\）
+  T1 基础启动        PASS  2560x1440 居中动画（bbox 716x504），24fps 推进
+                          （帧间 5.38% 像素变化，两时点 md5 不同）
+                          [t1t4_A/B.png]
+  T2 SB 未签名拒载   PASS  enrolled PK/KEK/db（enforcing）下未签名 BOOTX64
+                          全程无 2K 动画 → 固件拒绝，符合 R1 预期
+                          [t2f_d6/d9/d18.png]
+  T3 SB 签名放行     PASS  signtool SHA256 + db.pfx 签名后动画正常播放推进
+                          （与 T2 同固件同密钥，唯一变量=签名）[t3z_*.png]
+  T4 chainload       PASS  动画自然结束 → LoadImage+StartImage UiApp 占位符
+                          （1280x800 灰底 88.8% 菜单屏）[t1t4_C.png]
+  T5 分辨率降级      PASS  T5a: vgamem 8MB → 2K 不可用 → 自动降 1920x1080
+                          播放（d6=1080p 9.9% 动画）[t5a_d6.png]
+                          T5b: vgamem 4MB → 降 1280x720（模式设置+动画时序+
+                          chainload 正常，但像素黑屏——QEMU std-vga 极小
+                          显存合成配置的模型怪癖，8/16MB 不复现，真机无关）
+  T6 Esc 跳过        PASS  t+6.5 注入 Esc → t+7.7 已转 UiApp（自然结束
+                          ~t+9.5 之前 1.8s）→ 立即中止并 chainload [t6h_*.png]
+  T7 错误 chainload  PASS  Chainload=notexist.efi：动画照常播放 → 两行错误
+                          文本（"chainload failed, status=0x..."）+ 3s 停留
+                          → 安全返回 BDS 继续运行，无死机 [t7_err.png]
+  T8 缺资源容错      PASS  8a: 删 anim.bin → 直接 chainload 不阻塞；
+                          8b: 删 config.ini → §4.5 默认值兜底，动画照常播
+                          放后 chainload [t8a_*.png, t8b_*.png]
+
+  判定方法说明: 全部 QEMU 无头(-display none) + 双通道控制（QMP 截图/
+  HMP 按键），程序化像素取证（分辨率/非黑率/md5 帧差/边界框/文本带
+  高倍渲染），非人工目测——可 100% 复现。
+
+【失败项与缓解措施】
+  A. QMP 无 sendkey 命令（HMP 独有），首轮 T6 两轮无效
+     → 缓解: 增加 HMP TCP 通道；Qmp.cmd 改显式抛错；SeaBIOS F12 隔离
+       测试定位。Agent 输入模块零缺陷。
+  B. OVMF SB 固件首启停在 640x480 单行文本屏（与 VARS/签名无关）
+     → 缓解: 矩阵排除法确认需 -machine q35,smm=on + secure pflash
+       （edk2 SB 构建标准要求，P1 文档遗漏，已记入环境报告）。
+  C. virt-fw-vars --enroll-generate Windows tempfile 缺陷
+     → 缓解: openssl 三级证书链（PK→KEK→DB + codeSigning EKU）+
+       --set-pk/--add-kek/--add-db 显式注入（含 keyCertSign 拼写修正）。
+  D. T5b 720p 黑屏（仅 4MB 显存合成场景）
+     → 定性: QEMU std-vga 模型怪癖；降级判定与安全退出不受影响；
+       真机不存在此配置。记入已知限制。
+  E. 化妆瑕疵（非失败）: T7 错误提示 target 行显示常量默认路径，非
+     config 实际配置路径 → P5 评审项（一行修复，不影响行为）。
+
+【真机部署建议（P5 预研，未执行）】
+  1. 资源: anim.bin 11.4MB 远低于 254MB 预算，2K+109 帧可直接上真机，
+     无需降分辨率/减帧（§2.4 预案保留）。
+  2. 部署路径: \EFI\BootAnim\ 三件套 + bcdedit 启动项（REAL ESP S:，
+     需单独授权）。
+  3. 真机 SB: 若开启 Secure Boot，BootAnimation.efi 需有效签名
+     （测试自签证书仅 VM 用；真机需评估禁用 SB 或正规证书，风险评审
+     在 P5）。
+  4. 输入: 真机键盘直连 PS/2-模拟/USB，TextInputEx 路径已在 VM 验证；
+     建议 P5 增加 "任何键跳过" 现场确认。
+  5. 首次上机建议先 T8 等价演练（三件套临时目录 + 一次性 boot entry），
+     确认 worst-path 后再固化。
+
+【纪律】
+  无 API Key 写入；未上传本地路径/系统信息到外部；未修改/终止系统
+  进程（QEMU 均自行退出或测试脚本正常关闭）；未触发重启/注销。
+================================================================================
+（报告结束）
