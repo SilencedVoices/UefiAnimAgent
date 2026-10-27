@@ -9,6 +9,11 @@ Conf/
 __pycache__/
 *.pyc
 
+# 打包向导（PyInstaller 产物）
+build/
+dist/
+*.spec
+
 # Animation Assets (Too large for Git)
 *.bin
 *.bmp
@@ -27,3 +32,8 @@ tools/test_*.py
 # 本地备份与报告草稿（体积/隐私原因不入库）
 esp_backup/
 *.backup
+
+# 向导自带播放器与图标（构建 exe 必需，体积很小；动画素材不入库）
+!wizard/assets/BootAnimation.efi
+!wizard/assets/wizard.png
+!wizard/assets/wizard.ico

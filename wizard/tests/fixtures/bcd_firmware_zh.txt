@@ -1,0 +1,69 @@
+﻿
+固件启动管理器
+---------------------
+标识符                  {fwbootmgr}
+displayorder            {8f2b7a10-4c3d-4a61-9e11-0d1c2b3a4f50}
+                        {bootmgr}
+                        {3c5d7e91-2b4f-4c8a-8d3e-1a2b3c4d5e6f}
+                        {5e7f90b3-4d6b-4eac-af5a-3c4d5e6f7081}
+                        {6f80a1c4-5e7c-4fbd-b06b-4d5e6f708192}
+                        {4d6e8fa2-3c5a-4d9b-9e4f-2b3c4d5e6f70}
+timeout                 2
+
+Windows 启动管理器
+--------------------
+标识符                  {bootmgr}
+device                  partition=T:
+path                    \EFI\MICROSOFT\BOOT\BOOTMGFW.EFI
+description             Windows Boot Manager
+locale                  zh-CN
+inherit                 {globalsettings}
+nointegritychecks       Yes
+default                 {current}
+resumeobject            {7a91b2d5-6f8d-40ce-c17c-5e6f708192a3}
+displayorder            {current}
+                        {8ba2c3e6-709e-41df-d28d-6f708192a3b4}
+toolsdisplayorder       {memdiag}
+timeout                 5
+
+Windows 启动管理器
+--------------------
+标识符                  {8f2b7a10-4c3d-4a61-9e11-0d1c2b3a4f50}
+device                  partition=T:
+path                    \EFI\BOOTANIM\BOOTANIMATION.EFI
+description             UEFI Animation Agent
+locale                  zh-CN
+inherit                 {globalsettings}
+nointegritychecks       Yes
+default                 {current}
+resumeobject            {7a91b2d5-6f8d-40ce-c17c-5e6f708192a3}
+displayorder            {current}
+                        {8ba2c3e6-709e-41df-d28d-6f708192a3b4}
+toolsdisplayorder       {memdiag}
+timeout                 5
+
+固件应用程序(101fffff)
+-------------------------------
+标识符                  {3c5d7e91-2b4f-4c8a-8d3e-1a2b3c4d5e6f}
+device                  partition=\Device\HarddiskVolume3
+path                    \EFI\MICROSOFT\BOOT\BOOTMGFW.EFI
+description             Windows Boot Manager
+
+固件应用程序(101fffff)
+-------------------------------
+标识符                  {4d6e8fa2-3c5a-4d9b-9e4f-2b3c4d5e6f70}
+description             Sample NVMe SSD
+
+固件应用程序(101fffff)
+-------------------------------
+标识符                  {5e7f90b3-4d6b-4eac-af5a-3c4d5e6f7081}
+device                  partition=E:
+path                    \EFI\BOOT\BOOTX64.EFI
+description             UEFI OS
+
+固件应用程序(101fffff)
+-------------------------------
+标识符                  {6f80a1c4-5e7c-4fbd-b06b-4d5e6f708192}
+device                  partition=C:
+path                    \EFI\MICROSOFT\BOOT\BOOTMGFW.EFI
+description             Windows Boot Manager
