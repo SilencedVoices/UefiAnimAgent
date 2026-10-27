@@ -23,8 +23,9 @@ wizard/
   bcd.py                固件启动项解析与增删改（bcdedit 封装）
   pack.py               素材 → anim.bin + config.ini（自包含，不依赖 tools/）
   deploy.py             体检 / 安装（试用）/ 固化 / 回滚 / 状态 / 自诊
+  i18n.py               中英文文案表（zh/en）+ 字体/语言设置
   cli.py                命令行入口与 --selftest / --doctor / --sim-install
-  gui.py                tkinter 五步向导
+  gui.py                tkinter 五步向导（含设置对话框与用户须知）
   assets/               BootAnimation.efi（播放器）、图标、exe 版本信息
   tests/                自检与离线仿真（fixtures 里有中文 bcdedit 输出样本）
 ```
@@ -64,6 +65,7 @@ powershell -ExecutionPolicy Bypass -File .\build_exe.ps1 -Clean
 | 每个文件写完回读 SHA256，不一致立即失败 | `esp.copy_verified()` |
 | ESP 无盘符时拒绝安装（避免 BCD `partition=X:` 依赖临时盘符） | `esp.pick_windows_esp()` / `deploy` 前置 |
 | 临时挂载的盘符用后立即 `mountvol /D` | `esp.Esp.unmount()` |
+| 首次启动必须先勾选用户须知（风险/免责/隐私/撤销），记录在 settings.json | `gui._first_run_notice()` / `NOTICE_VERSION` |
 
 回滚永远先摘启动项（立刻恢复开机行为），再决定动不动文件。
 
@@ -78,10 +80,17 @@ powershell -ExecutionPolicy Bypass -File .\build_exe.ps1 -Clean
   `build_exe.ps1` 里用 `@(@(...) | Where-Object ...)` 包一层。
 - **带中文的 .ps1 存盘必须 UTF-8 BOM**，否则 Windows PowerShell 5.1 按 ANSI 解析直接语法报错。
 
+## 界面语言与字体
+
+- 文案集中在 `i18n.py`：`LANGS = (('zh','简体中文'),('en','English'))`，`t('key', *args)` 取当前语言，`set_lang(code)` 切换；新增文案必须两种语言都写，否则自检的 `i18n.parity` 会失败。
+- 字体/语言/须知状态保存在 `%LOCALAPPDATA%\\UefiAnimWizard\\settings.json`；`paths.load_settings()/save_settings()` 读写，换语言只调 `gui._rebuild()` 重建界面（不动已完成状态）。
+- 字号放大后用 `gui._fit_window()` 按各块 `winfo_reqheight` 之和撑高窗口，避免底部按钮被裁。
+
 ## 测试覆盖
 
-`--selftest`（16 项）：QOI 打包、容器头/索引/体积、config 生成、BMP 阈值拒绝、空素材拒绝、
-bcdedit 中文样本解析（条目数/displayorder/timeout/agent 识别）、环境（管理员/UEFI/SB/分辨率/OS）、ESP 发现。
+`--selftest`（17 项）：QOI 打包、容器头/索引/体积、config 生成、BMP 阈值拒绝、空素材拒绝、
+bcdedit 中文样本解析（条目数/displayorder/timeout/agent 识别）、环境（管理员/UEFI/SB/分辨率/OS）、ESP 发现、
+中英文案完整性（154 条，缺一条就 FAIL）。
 
 `--sim-install`（18 项）：真实调用 `deploy.install/activate/rollback`，但 ESP 指向临时目录、
 bcdedit 换成内存假实现，验证——写文件并校验 SHA256、备份 anim/bcd、只设 bootsequence 不改

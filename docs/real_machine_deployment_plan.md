@@ -14,8 +14,8 @@
 | bootmgfw.efi | `S:\EFI\Microsoft\Boot\bootmgfw.efi` = **1,604,016 B**（2026-06-29） | 可读，链式加载目标在位 |
 | Secure Boot | `Confirm-SecureBootUEFI = False`；注册表 UEFISecureBootEnabled=0 | **SB 关闭** |
 | SB 密钥 | PK / KEK / db 均**未部署**（0xC0000100）；dbx 1B 占位 | 未签名 Agent 可直接加载 |
-| BCD 固件层 | `{fwbootmgr}` displayorder：①`{bootmgr}` ②bootmgfw@恢复分区 ③**UEFI OS@E:** ④SSD 固件项 ⑤bootmgfw@C:，timeout=2 | `{bootmgr}` 第一顺位 |
-| BCD 系统层 | `{bootmgr}`→S:\EFI\MICROSOFT\BOOT\BOOTMGFW.EFI，default `{current}`（Windows 10），displayorder 含 **第三方 WinPE**（可移动介质上的 .wim），nointegritychecks=Yes（既有状态） | 已有自定义项，不可扰动 |
+| BCD 固件层 | `{fwbootmgr}` displayorder：①`{bootmgr}` ②bootmgfw@恢复分区 ③可移动介质 OS 项 ④SSD 固件项 ⑤系统盘 bootmgfw，timeout=2 | `{bootmgr}` 第一顺位 |
+| BCD 系统层 | `{bootmgr}`→S:\EFI\MICROSOFT\BOOT\BOOTMGFW.EFI，default `{current}`（Windows 10），displayorder 含 第三方 WinPE 项（可移动介质上的 .wim），nointegritychecks=Yes（既有状态） | 已有自定义项，不可扰动 |
 | 恢复项 | `{WinRE 项}`（指向恢复分区） | 标准在位 |
 
 ## 2. 备份清单（<项目根>\p5\esp_backup\）

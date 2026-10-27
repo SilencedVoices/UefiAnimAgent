@@ -8,7 +8,7 @@
   4. 每一步失败都停手并给出回滚路径，不吞异常。
 """
 
-__version__ = '1.0.0'
+__version__ = '1.1.0'
 APP_NAME = 'UefiAnimWizard'
 APP_TITLE = 'UEFI 开机动画向导'
 

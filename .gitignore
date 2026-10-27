@@ -37,3 +37,4 @@ esp_backup/
 !wizard/assets/BootAnimation.efi
 !wizard/assets/wizard.png
 !wizard/assets/wizard.ico
+!docs/images/*.png

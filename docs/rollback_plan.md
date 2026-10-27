@@ -57,7 +57,7 @@ bcdedit /store S:\EFI\Microsoft\Boot\BCD /delete {Agent的GUID} /cleanup
 ```
 
 ### 2.3 也可借用本机已有的 第三方 WinPE WinPE
-本机 BCD 已含 `第三方 WinPE`（可移动介质上的 .wim）启动项，开机启动菜单
+本机 BCD 已含 第三方 WinPE（可移动介质上的 .wim）启动项，开机启动菜单
 选择它进入 PE，用 PE 自带的引导修复工具/命令行执行 2.2 同样命令。
 
 ## 3. 回滚方式三：从 esp_backup 整店还原（BCD 大面积损坏时）

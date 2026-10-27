@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
+    filevers=(1, 1, 0, 0),
+    prodvers=(1, 1, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -16,12 +16,12 @@ VSVersionInfo(
         [
           StringStruct('CompanyName', 'UefiAnimAgent'),
           StringStruct('FileDescription', 'UEFI 开机动画向导'),
-          StringStruct('FileVersion', '1.0.0.0'),
+          StringStruct('FileVersion', '1.1.0.0'),
           StringStruct('InternalName', 'UefiAnimWizard'),
           StringStruct('LegalCopyright', 'MIT License'),
           StringStruct('OriginalFilename', 'UefiAnimWizard.exe'),
           StringStruct('ProductName', 'UEFI 开机动画向导'),
-          StringStruct('ProductVersion', '1.0.0.0')
+          StringStruct('ProductVersion', '1.1.0.0')
         ]
       )
     ]),

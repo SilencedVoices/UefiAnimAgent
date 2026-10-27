@@ -1,4 +1,6 @@
-﻿
+﻿# 测试用样本：真实 bcdedit /enum firmware 中文输出，已做脱敏
+# （GUID、硬盘型号、盘符全部替换为虚构值；结构与真实输出一致）
+
 固件启动管理器
 ---------------------
 标识符                  {fwbootmgr}
@@ -13,7 +15,7 @@ timeout                 2
 Windows 启动管理器
 --------------------
 标识符                  {bootmgr}
-device                  partition=T:
+device                  partition=S:
 path                    \EFI\MICROSOFT\BOOT\BOOTMGFW.EFI
 description             Windows Boot Manager
 locale                  zh-CN
@@ -29,7 +31,7 @@ timeout                 5
 Windows 启动管理器
 --------------------
 标识符                  {8f2b7a10-4c3d-4a61-9e11-0d1c2b3a4f50}
-device                  partition=T:
+device                  partition=S:
 path                    \EFI\BOOTANIM\BOOTANIMATION.EFI
 description             UEFI Animation Agent
 locale                  zh-CN

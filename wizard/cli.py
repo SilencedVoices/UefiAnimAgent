@@ -100,6 +100,16 @@ def cmd_selftest(argv):
     except Exception as e:
         rec('esp.discover', False, str(e)[:120])
 
+    # 5) 中英文案完整性（缺 key 的界面会显示成 key 本身）
+    try:
+        import wizard.i18n as i18n_mod
+        miss = i18n_mod.missing_keys()
+        rec('i18n.parity', not miss,
+            '%d 条文案，缺 %s' % (i18n_mod.key_count(),
+                                  ('、'.join(miss[:6]) if miss else '无')))
+    except Exception as e:
+        rec('i18n.parity', False, str(e)[:120])
+
     ok = all(x[1] for x in results)
     rp = _report_path('selftest')
     with open(rp, 'w', encoding='utf-8') as f:

@@ -68,6 +68,58 @@ def log_dir():
     return d
 
 
+def settings_path():
+    return os.path.join(data_dir(), 'settings.json')
+
+
+DEFAULT_SETTINGS = {
+    'lang': 'zh',            # zh | en
+    'font_family': '',       # 空 = 自动（跟随语言默认）
+    'font_size': 10,         # 基准字号 9..16
+    'notice_accepted': 0,    # 已同意的须知版本号；0 = 未同意
+}
+
+
+def load_settings():
+    """读设置；损坏/缺失都退回默认值，绝不因此崩。"""
+    import json
+    data = dict(DEFAULT_SETTINGS)
+    try:
+        with open(settings_path(), 'r', encoding='utf-8') as f:
+            raw = json.load(f)
+        if isinstance(raw, dict):
+            for k in DEFAULT_SETTINGS:
+                if k in raw:
+                    data[k] = raw[k]
+    except (OSError, ValueError):
+        pass
+    try:
+        data['font_size'] = max(9, min(16, int(data['font_size'])))
+    except (TypeError, ValueError):
+        data['font_size'] = DEFAULT_SETTINGS['font_size']
+    if data.get('lang') not in ('zh', 'en'):
+        data['lang'] = DEFAULT_SETTINGS['lang']
+    return data
+
+
+def save_settings(data):
+    """原子写：先写 .tmp 再 replace，避免半截文件。"""
+    import json
+    path = settings_path()
+    tmp = path + '.tmp'
+    try:
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+        return True
+    except OSError:
+        try:
+            os.path.exists(tmp) and os.remove(tmp)
+        except OSError:
+            pass
+        return False
+
+
 def new_log_path(hint='wizard'):
     stamp = time.strftime('%Y%m%d_%H%M%S')
     return os.path.join(log_dir(), '%s_%s.log' % (hint, stamp))
