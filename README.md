@@ -1,18 +1,14 @@
 # UEFI Boot Animation Agent（UefiAnimAgent）
 
-> 在 UEFI 阶段播放开机动画、播完自动链式引导 Windows 的引导代理。纯 EDK2 实现，无运行时依赖。5步实现的辅助脚本。
+> 在 UEFI 阶段播放开机动画，播完自动链式引导 Windows 的引导代理。纯 EDK2 实现，无运行时依赖；另附一个五步图形向导，帮你把动画装进 ESP。
 
 [English summary](#english-summary) 在文末。
 
-## 制作经历
+## 这个项目是怎么来的
 
-电脑新手一枚。某天突发奇想，用 AE 做了一段"无限符号 → DeepSeek 标志"的矢量线条动画，又用 AE做了一段开机动画素材，于是起了做成开机动画的念头，————这个项目就这么来的。
+电脑新手一枚。某天突发奇想，用 AE 做了一段"无限符号 → DeepSeek 标志"的矢量线条动画，又顺手做了一段开机动画素材，于是起了"让它出现在开机第一屏"的念头。
 
-<<<<<<< Updated upstream
-想法简单，实际有坑：UEFI 阶段没有现成的播放器，只能让AI用 EDK2 从零写一个引导代理；固件 GOP 的缓冲、帧率时基、键盘输入、Secure Boot 签名。最后在虚拟机上测通，又在真机上完整跑通——开机、播放、自动进入 Windows，Esc 随时可跳过。
-=======
-想法简单，实现困难：UEFI 阶段没有现成的播放器，只能让AI用 EDK2 从零写一个引导代理；固件 GOP 的缓冲、帧率时基、键盘输入、Secure Boot 签名，每一环都要。最后在虚拟机上测通全部用例，又在真机上完整跑通——开机、播放、自动进入 Windows，Esc 随时可跳过。
->>>>>>> Stashed changes
+想法简单，做起来有坑：UEFI 阶段没有现成的播放器，只能让 AI 用 EDK2 从零写一个引导代理——固件 GOP 的缓冲、帧率时基、键盘输入、Secure Boot 签名，每一环都得自己啃。最后在虚拟机上跑通全部用例，又在真机上完整跑通：开机、播放、自动进入 Windows，Esc 随时可跳过。
 
 本人的审美和技术水平都有限，附带的自制开机动画比较粗糙，望各位多多包容；项目后续也会继续改进。
 
@@ -41,14 +37,16 @@ example/       config.ini 示例
 
 ## 快速开始
 
-**1. 打包动画**（GUI 或 CLI 任选其一）
+**只想装个动画**（最省事）：下载 Release 里的 `UefiAnimWizard.exe` 双击运行，跟着五步向导走。详见[图形化向导](#图形化向导新手推荐)。
+
+**想自己打包动画**（GUI 或 CLI 任选其一）：
 
 ```powershell
 python tools\AnimPackerGUI.py
 python tools\make_anim.py --input <帧目录> --output anim.bin --format QOI --fps 24
 ```
 
-**2. 虚拟机试放**（强烈建议先于真机）
+**先在虚拟机试放**（强烈建议先于真机）：
 
 ```powershell
 # esp\EFI\BootAnim\{BootAnimation.efi, anim.bin, config.ini}
@@ -57,7 +55,7 @@ qemu-system-x86_64 -machine q35 -m 512 -bios OVMF.fd -vga std `
   -drive file=fat:rw:esp,format=raw,media=disk
 ```
 
-**3. 真机部署**：见 [docs/DEPLOY.md](docs/DEPLOY.md)（BCD 条目创建与一键回滚）。
+**真机部署**：见 [docs/DEPLOY.md](docs/DEPLOY.md)（BCD 条目创建与一键回滚）。
 
 ## 图形化向导（新手推荐）
 
@@ -77,10 +75,10 @@ powershell -ExecutionPolicy Bypass -File .\build_exe.ps1 -Clean
 - 开发者文档：[wizard/README.md](wizard/README.md)（安全模型、构建、自检与离线仿真）
 - 安全默认：只写 `\EFI\BootAnim`；**默认 `{fwbootmgr} bootsequence` 只试一次**，失败由固件自动回 Windows；
   写文件前先备份 ESP 文件并 `bcdedit /export`，每个文件回读 SHA256。
-- 双语界面 + 可换字体：标题栏“设置”里切简体中文 / English，字号 10~28（默认 12，按 DPI 换算成像素）；首次启动先弹“用户须知”（风险/免责/隐私/撤销），勾选同意后才能安装
+- 双语界面 + 可换字体：标题栏"设置"里切简体中文 / English，字号 10~28（默认 12，按 DPI 换算成像素）；首次启动先弹"用户须知"（风险/免责/隐私/撤销），勾选同意后才能安装
 - 窗口自适应：字号变大时按控件实际需求撑大窗口，超过屏幕可用区域（任务栏以外）直接最大化；窗口大小会记住，下次启动沿用
-- 体检结果用“可滚动 + 自动换行”的标签列表渲染（不用 Treeview：它的行高不吃字体、单元格不换行，大字号下必然重叠/截断）
-- 第 3 步可直接“选成品 anim.bin”：按文件头里的宽高/帧率补写 config.ini，跳过制作直接安装
+- 体检结果用"可滚动 + 自动换行"的标签列表渲染（不用 Treeview：它的行高不吃字体、单元格不换行，大字号下必然重叠/截断）
+- 第 3 步可直接"选成品 anim.bin"：按文件头里的宽高/帧率补写 config.ini，跳过制作直接安装
 - 自检：`UefiAnimWizard.exe --selftest`（17 项，含中英文案完整性）、`--sim-install`（18 项安装/固化/回滚仿真，不动本机）
 
 ## 构建
@@ -125,8 +123,9 @@ BMP_RAW24 帧 = top-down BGR 行数据    QOI 帧 = 完整 QOI 图像
 A pure-EDK2 UEFI boot animation agent: plays a UAN1-packed QOI/BMP frame
 sequence with double-buffered GOP rendering and TSC-based pacing (24–120fps),
 Esc-to-skip, then chain-loads the Windows Boot Manager. Includes a
-tkinter+Pillow GUI packer (1080p–4K, letterbox normalization) and a CLI
-packer. Prebuilt binaries and sample packs ship via GitHub Releases.
+tkinter+Pillow GUI packer (1080p–4K, letterbox normalization), a CLI packer,
+and a five-step installation wizard (Python + tkinter, shipped as a single exe).
+Prebuilt binaries and sample packs ship via GitHub Releases.
 See docs/BUILDING.md and docs/DEPLOY.md.
 
 ## 许可证
