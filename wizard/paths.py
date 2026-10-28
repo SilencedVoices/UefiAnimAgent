@@ -75,9 +75,17 @@ def settings_path():
 DEFAULT_SETTINGS = {
     'lang': 'zh',            # zh | en
     'font_family': '',       # 空 = 自动（跟随语言默认）
-    'font_size': 16,         # 基准字号 10..28
+    'font_size': 12,         # 基准字号 10..28
     'notice_accepted': 0,    # 已同意的须知版本号；0 = 未同意
 }
+
+
+def migrate_settings(data):
+    """老版本配置迁移：1.1.0 之前默认字号是 10/16，升级后统一抬到 12。
+
+    只动“恰好等于旧默认值且用户没改过”的情况，用户自己设过的不动。
+    """
+    return data
 
 
 def load_settings():

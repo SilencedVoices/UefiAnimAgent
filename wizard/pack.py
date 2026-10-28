@@ -445,6 +445,23 @@ def self_test(logger=None):
     return results
 
 
+def read_meta(anim_path):
+    """读 anim.bin 头部元数据：dict(frames, fps, width, height, fmt)；读不到返回 None。"""
+    try:
+        with open(anim_path, 'rb') as f:
+            head = f.read(24)
+        if len(head) < 24:
+            return None
+        m, ver, fmt, count, fps, w, h, idx_off = struct.unpack(HEADER, head)
+        if m != MAGIC:
+            return None
+        return dict(frames=count, fps=fps, width=w, height=h,
+                    fmt='QOI' if fmt == FORMAT_QOI else ('BMP' if fmt == FORMAT_BMP else str(fmt)),
+                    size=os.path.getsize(anim_path))
+    except (OSError, struct.error):
+        return None
+
+
 def frame_count(anim_path):
     """读 anim.bin 的帧数（读不到就返回 0）。"""
     try:

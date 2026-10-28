@@ -113,6 +113,16 @@ STRINGS = {
     'p3.pickdir': ('选文件夹…', 'Folder…'),
     'p3.pickfile': ('选文件…', 'File…'),
     'p3.demo': ('用演示动画', 'Use demo'),
+    'p3.pickbin': ('选成品 anim.bin…', 'Pick existing anim.bin…'),
+    'p3.filetypes.bin': ('动画包 (anim.bin)', 'Animation pack (anim.bin)'),
+    'p3.bin.loaded': ('已载入现成动画：%s\n%dx%d，%d 帧，%d fps，%.2f MB。可点"下一步"直接安装。',
+                      'Loaded existing animation: %s\n%dx%d, %d frames, %d fps, %.2f MB. Click Next to install.'),
+    'p3.bin.bad.t': ('不是有效的 anim.bin', 'Not a valid anim.bin'),
+    'p3.bin.bad.b': ('这个文件的文件头不是 UAN1（本工具/播放器使用的动画包格式）。\n'
+                    '请选择由本工具"制作动画"生成的 anim.bin。',
+                    'This file is not a UAN1 animation pack.\n'
+                    'Pick an anim.bin produced by this wizard.'),
+
     'p3.out': ('输出目录', 'Output folder'),
     'p3.browse': ('浏览…', 'Browse…'),
     'p3.res': ('分辨率', 'Resolution'),

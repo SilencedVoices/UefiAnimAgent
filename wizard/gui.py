@@ -11,6 +11,7 @@
 """
 import os
 import queue
+import shutil
 import subprocess
 import sys
 import threading
@@ -19,13 +20,14 @@ import traceback
 import tkinter as tk
 from tkinter import filedialog, font as tkfont, messagebox, ttk
 
-from . import APP_NAME, __version__, i18n, paths
+from . import ANIM_NAME, APP_NAME, __version__, i18n, paths
 from . import deploy, esp, pack, sysinfo
 
 C_OK = '#1f7a1f'
 C_WARN = '#a86400'
 C_FAIL = '#b00020'
 C_DIM = '#5a5a5a'
+BG = '#f7f7f7'      # 与 ttk vista 主题的底色接近，画布不显突兀
 
 NOTICE_VERSION = 1
 
@@ -69,6 +71,7 @@ class Gui(object):
             pass
         self.root = tk.Tk()
         self._flex_labels = []          # 需要随窗口宽度自动换行的长文本标签
+        self._check_redraw_pending = False
         self._preview_path = ''
 
         self.log = paths.Logger(sink=self._log_append)
@@ -104,14 +107,14 @@ class Gui(object):
         if not fam:
             fam = 'Segoe UI' if i18n.is_en() else 'Microsoft YaHei UI'
         try:
-            size = int(self.settings.get('font_size', 16)) + delta
+            size = int(self.settings.get('font_size', 12)) + delta
         except (TypeError, ValueError):
-            size = 16 + delta
+            size = 12 + delta
         return (fam, size, 'bold') if bold else (fam, size)
 
     def _mono(self):
         try:
-            size = max(9, int(self.settings.get('font_size', 16)) - 2)
+            size = max(9, int(self.settings.get('font_size', 12)) - 2)
         except (TypeError, ValueError):
             size = 9
         return ('Consolas', size)
@@ -130,6 +133,15 @@ class Gui(object):
         st.configure('Warn.TLabel', foreground=C_WARN)
         st.configure('Fail.TLabel', foreground=C_FAIL)
         st.configure('Big.TButton', font=self._font(0, True), padding=(14, 8))
+        # Treeview 的行高不吃字体设置，必须自己按字体行距算，否则大字号下文字会重叠
+        try:
+            import tkinter.font as tkfont
+            lh = tkfont.Font(root=self.root, font=self._font()).metrics('linespace')
+        except Exception:
+            lh = 0
+        row_h = max(20, int(lh), int(lh * 1.15) + 6)
+        st.configure('Treeview', rowheight=row_h, font=self._font())
+        st.configure('Treeview.Heading', font=self._font(0, True))
         self.root.option_add('*Font', self._font())
 
     def _build(self):
@@ -195,6 +207,12 @@ class Gui(object):
         w = (ev.width if ev is not None else self.root.winfo_width()) - 40
         if w < 320:
             return
+        if self.step == 1 and getattr(self, 'pf', None) is not None:
+            self._tree_layout()
+        if self.step == 2 and getattr(self, '_preview_path', ''):
+            if not getattr(self, '_preview_redraw_pending', False):
+                self._preview_redraw_pending = True
+                self.root.after(200, self._redraw_preview)
         for lb in list(getattr(self, '_flex_labels', [])):
             try:
                 if lb.winfo_exists() and int(lb.cget('wraplength') or 0) != w:
@@ -315,17 +333,28 @@ class Gui(object):
         self.btn_recheck = ttk.Button(top, text=i18n.t('p2.recheck'), command=self._do_check)
         self.btn_recheck.pack(side='right')
 
-        cols = ('level', 'title', 'detail')
-        self.tree = ttk.Treeview(fr, columns=cols, show='headings', height=10)
-        for c, w in (('level', 70), ('title', 430), ('detail', 470)):
-            self.tree.heading(c, text=i18n.t('p2.col.' + c))
-            self.tree.column(c, width=w, anchor='w', stretch=(c == 'detail'))
-        self.tree.tag_configure('ok', foreground=C_OK)
-        self.tree.tag_configure('warn', foreground=C_WARN)
-        self.tree.tag_configure('error', foreground=C_FAIL)
-        self.tree.pack(fill='both', expand=True, pady=(8, 8))
+        # 体检结果用“可滚动 + 自动换行”的标签列表，而不是 Treeview：
+        # Treeview 的行高不吃字体、单元格不换行，大字号下必然重叠/截断。
+        outer = ttk.Frame(fr)
+        outer.pack(fill='both', expand=True, pady=(8, 8))
+        self.check_canvas = tk.Canvas(outer, highlightthickness=0, borderwidth=0,
+                                      background=BG)
+        vsb = ttk.Scrollbar(outer, orient='vertical', command=self.check_canvas.yview)
+        self.check_canvas.configure(yscrollcommand=vsb.set)
+        vsb.pack(side='right', fill='y')
+        self.check_canvas.pack(side='left', fill='both', expand=True)
+        self.check_inner = ttk.Frame(self.check_canvas)
+        self._check_win = self.check_canvas.create_window((0, 0), window=self.check_inner,
+                                                         anchor='nw')
+        self.check_inner.bind(
+            '<Configure>',
+            lambda e: self.check_canvas.configure(scrollregion=self.check_canvas.bbox('all')))
+        self.check_canvas.bind(
+            '<Configure>',
+            lambda e: self.check_canvas.itemconfigure(self._check_win, width=e.width))
+        self.tree = None
 
-        self.txt_fix = tk.Text(fr, height=7, wrap='word', font=self._font(),
+        self.txt_fix = tk.Text(fr, height=4, wrap='word', font=self._font(),
                                relief='solid', borderwidth=1, background='#fffbe6')
         self.txt_fix.pack(fill='x')
         self.txt_fix.configure(state='disabled')
@@ -341,6 +370,17 @@ class Gui(object):
             ttk.Button(row, text=i18n.t('p2.relaunch'),
                        command=self._relaunch_admin).pack(side='left', padx=8)
 
+    def _tree_layout(self):
+        """窗口/字体变化后按新宽度重排体检结果（标签换行宽度跟着变）。"""
+        if self.pf is not None and not self._check_redraw_pending:
+            self._check_redraw_pending = True
+            self.root.after(120, self._redraw_checks)
+
+    def _redraw_checks(self):
+        self._check_redraw_pending = False
+        if self.pf is not None:
+            self._render_check(self.pf)
+
     def _relaunch_admin(self):
         if sysinfo.relaunch_as_admin(logger=self.log):
             self.root.after(300, self.root.destroy)
@@ -354,7 +394,7 @@ class Gui(object):
         self.busy = True
         self.btn_recheck.config(state='disabled')
         self.var_check.set(i18n.t('p2.running'))
-        self.tree.delete(*self.tree.get_children())
+        self._check_clear()
 
         def work():
             try:
@@ -364,13 +404,46 @@ class Gui(object):
                 self.q.put(('check_err', traceback.format_exc(), None))
         threading.Thread(target=work, daemon=True).start()
 
+    def _check_clear(self):
+        for w in self.check_inner.winfo_children():
+            w.destroy()
+
     def _render_check(self, pf):
         self.pf = pf
-        self.tree.delete(*self.tree.get_children())
-        for c in pf.checks:
-            tag = {'ok': 'ok', 'warn': 'warn', 'error': 'error'}.get(c.level, '')
-            mark = i18n.t('p2.mark.' + c.level) if c.level in ('ok', 'warn', 'error') else c.level
-            self.tree.insert('', 'end', values=(mark, c.title, c.detail), tags=(tag,))
+        self._check_clear()
+        style_of = {'ok': 'Ok.TLabel', 'warn': 'Warn.TLabel', 'error': 'Fail.TLabel'}
+        try:
+            total = max(360, self.check_canvas.winfo_width() or 900)
+        except Exception:
+            total = 900
+        try:
+            cw = max(8, tkfont.Font(root=self.root, font=self._font()).measure('阻'))
+        except Exception:
+            cw = 16
+        w_mark = max(cw * 2 + 24, int(total * 0.08))
+        w_title = max(cw * 8, int(total * 0.38))
+        w_detail = max(cw * 8, total - w_mark - w_title - 30)
+
+        # 表头
+        for col, txt, wid in ((0, 'p2.col.level', w_mark), (1, 'p2.col.title', w_title),
+                              (2, 'p2.col.detail', w_detail)):
+            ttk.Label(self.check_inner, text=i18n.t(txt), style='H.TLabel',
+                      wraplength=max(40, wid - 8), justify='left').grid(
+                row=0, column=col, sticky='w', padx=(0, 10), pady=(0, 4))
+
+        for i, c in enumerate(pf.checks, start=1):
+            st = style_of.get(c.level, 'TLabel')
+            mark = (i18n.t('p2.mark.' + c.level)
+                    if c.level in ('ok', 'warn', 'error') else c.level)
+            ttk.Label(self.check_inner, text=mark, style=st, justify='left',
+                      wraplength=max(40, w_mark - 8)).grid(
+                row=i, column=0, sticky='nw', padx=(0, 10), pady=2)
+            ttk.Label(self.check_inner, text=c.title, style=st, justify='left',
+                      wraplength=max(80, w_title - 8)).grid(
+                row=i, column=1, sticky='nw', padx=(0, 10), pady=2)
+            ttk.Label(self.check_inner, text=c.detail, justify='left',
+                      wraplength=max(80, w_detail - 8)).grid(
+                row=i, column=2, sticky='nw', pady=2)
         fixes = [c for c in pf.checks if c.fix]
         self.txt_fix.configure(state='normal')
         self.txt_fix.delete('1.0', 'end')
@@ -414,6 +487,8 @@ class Gui(object):
         ttk.Button(btns, text=i18n.t('p3.pickfile'), command=self._pick_file).pack(
             side='left', padx=4)
         ttk.Button(btns, text=i18n.t('p3.demo'), command=self._pick_demo).pack(side='left')
+        ttk.Button(btns, text=i18n.t('p3.pickbin'),
+                   command=self._pick_bin).pack(side='left', padx=(4, 0))
 
         ttk.Label(grid, text=i18n.t('p3.out')).grid(row=1, column=0, sticky='w', pady=4)
         self.var_out = tk.StringVar(value=os.path.join(paths.data_dir(), 'anim'))
@@ -447,7 +522,7 @@ class Gui(object):
         self._flex_labels.append(lbl_done)
 
         self.preview_frame = ttk.LabelFrame(fr, text=i18n.t('p3.preview'), padding=8)
-        self.preview_frame.pack(fill='both', expand=True, pady=(10, 0))
+        self.preview_frame.pack(fill='x', pady=(10, 0))
         # 预览区自适应：Label 自己就是面板，图片按面板尺寸缩放
         self.preview_box = self.preview_frame
         self.lbl_preview = ttk.Label(self.preview_frame, text=i18n.t('p3.preview.empty'),
@@ -473,6 +548,40 @@ class Gui(object):
         d = filedialog.askdirectory(title=i18n.t('p3.browse'))
         if d:
             self.var_out.set(os.path.normpath(d))
+
+    def _pick_bin(self):
+        """直接选一个已经做好的 anim.bin，跳过制作步骤。"""
+        if self.busy:
+            return
+        path = filedialog.askopenfilename(
+            title=i18n.t('p3.pickbin'),
+            filetypes=[(i18n.t('p3.filetypes.bin'), '*.bin'),
+                       (i18n.t('p3.allfiles'), '*.*')])
+        if not path:
+            return
+        meta = pack.read_meta(path)
+        if not meta:
+            messagebox.showerror(i18n.t('p3.bin.bad.t'), i18n.t('p3.bin.bad.b'))
+            return
+        dest = os.path.join(paths.data_dir(), 'imported')
+        try:
+            os.makedirs(dest, exist_ok=True)
+            target = os.path.join(dest, ANIM_NAME)
+            if os.path.abspath(path) != os.path.abspath(target):
+                shutil.copyfile(path, target)
+            # 现成动画不知道播放器该怎么配，按文件头里的宽高/帧率写一份 config.ini
+            pack.write_config(dest, meta['width'], meta['height'], meta['fps'])
+        except OSError as e:
+            messagebox.showerror(i18n.t('err.pack'), str(e))
+            return
+        self.anim_dir = dest
+        self._preview_path = target
+        self.log('[gui] 载入现成动画：%s -> %s' % (path, target))
+        self.var_pack.set(i18n.t('p3.bin.loaded', os.path.basename(path),
+                                 meta['width'], meta['height'], meta['frames'],
+                                 meta['fps'], meta['size'] / 1048576.0))
+        self._show_preview(target)
+        self._refresh_buttons()
 
     def _pick_demo(self):
         if self.busy:
@@ -543,8 +652,11 @@ class Gui(object):
             iw, ih = im.size
             if iw and ih:
                 # 按面板可用空间等比缩放，高分屏/大字号下也能看清
-                w = max(160, (self.preview_box.winfo_width() or 640) - 24)
-                h = max(120, (self.preview_box.winfo_height() or 360) - 24)
+                # 缩略图约占窗口宽的 28%、高的 22%，既看得清又不挤占排版
+                ww = self.root.winfo_width() or 1280
+                hh = self.root.winfo_height() or 860
+                w = max(280, min(700, int(ww * 0.28)))
+                h = max(160, min(400, int(hh * 0.22)))
                 k = min(w / float(iw), h / float(ih))
                 im = im.resize((max(1, int(iw * k)), max(1, int(ih * k))))
             self.photo = ImageTk.PhotoImage(im)
@@ -578,6 +690,11 @@ class Gui(object):
             if not _is_blank(cand):
                 return cand
         return im
+
+    def _redraw_preview(self):
+        self._preview_redraw_pending = False
+        if self._preview_path and os.path.isfile(self._preview_path):
+            self._show_preview(self._preview_path)
 
     def _repreview(self, path=None):
         """窗口尺寸变化后按新面板大小重绘首帧预览。"""
@@ -809,7 +926,7 @@ class Gui(object):
         auto_label = i18n.t('set.font.auto')
         cur_fam = self.settings.get('font_family') or ''
         var_font = tk.StringVar(value=cur_fam if cur_fam in families else auto_label)
-        var_size = tk.StringVar(value=str(self.settings.get('font_size', 10)))
+        var_size = tk.StringVar(value=str(self.settings.get('font_size', 12)))
 
         ttk.Label(fr, text=i18n.t('set.lang')).grid(row=0, column=0, sticky='w', pady=6)
         ttk.Combobox(fr, textvariable=var_lang, state='readonly', width=32,
