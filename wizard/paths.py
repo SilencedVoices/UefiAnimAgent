@@ -75,7 +75,7 @@ def settings_path():
 DEFAULT_SETTINGS = {
     'lang': 'zh',            # zh | en
     'font_family': '',       # 空 = 自动（跟随语言默认）
-    'font_size': 10,         # 基准字号 9..16
+    'font_size': 16,         # 基准字号 10..28
     'notice_accepted': 0,    # 已同意的须知版本号；0 = 未同意
 }
 
@@ -94,7 +94,7 @@ def load_settings():
     except (OSError, ValueError):
         pass
     try:
-        data['font_size'] = max(9, min(16, int(data['font_size'])))
+        data['font_size'] = max(10, min(28, int(data['font_size'])))
     except (TypeError, ValueError):
         data['font_size'] = DEFAULT_SETTINGS['font_size']
     if data.get('lang') not in ('zh', 'en'):

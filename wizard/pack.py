@@ -445,6 +445,19 @@ def self_test(logger=None):
     return results
 
 
+def frame_count(anim_path):
+    """读 anim.bin 的帧数（读不到就返回 0）。"""
+    try:
+        with open(anim_path, 'rb') as f:
+            head = f.read(24)
+        if len(head) < 24:
+            return 0
+        m, ver, fmt, count, fps, w, h, idx_off = struct.unpack(HEADER, head)
+        return count if m == MAGIC else 0
+    except (OSError, struct.error):
+        return 0
+
+
 def read_frame(anim_path, index=0):
     """从 anim.bin 读第 index 帧并返回 PIL RGB 图像（预览/诊断用）。"""
     Image = pillow()

@@ -73,7 +73,8 @@ powershell -ExecutionPolicy Bypass -File .\build_exe.ps1 -Clean
 - 开发者文档：[wizard/README.md](wizard/README.md)（安全模型、构建、自检与离线仿真）
 - 安全默认：只写 `\EFI\BootAnim`；**默认 `{fwbootmgr} bootsequence` 只试一次**，失败由固件自动回 Windows；
   写文件前先备份 ESP 文件并 `bcdedit /export`，每个文件回读 SHA256。
-- 双语界面 + 可换字体：标题栏“设置”里切简体中文 / English，字号 9~16；首次启动先弹“用户须知”（风险/免责/隐私/撤销），勾选同意后才能安装
+- 双语界面 + 可换字体：标题栏“设置”里切简体中文 / English，字号 10~28（默认 16，按 DPI 换算成像素，4K 屏也够大）；首次启动先弹“用户须知”（风险/免责/隐私/撤销），勾选同意后才能安装
+- 窗口自适应：字号变大时按控件实际需求撑大窗口，超过屏幕可用区域（任务栏以外）直接最大化；窗口大小会记住，下次启动沿用
 - 自检：`UefiAnimWizard.exe --selftest`（17 项，含中英文案完整性）、`--sim-install`（18 项安装/固化/回滚仿真，不动本机）
 
 ## 构建

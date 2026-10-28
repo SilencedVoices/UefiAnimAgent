@@ -257,6 +257,7 @@ STRINGS = {
     'hint.checking': ('正在体检…', 'Checking…'),
     'hint.block': ('先处理体检里的阻塞项', 'Fix the blocked items in Preflight first'),
     'hint.pack': ('先制作动画（或选"以演示动画安装"）', 'Build an animation first (or use the demo install)'),
+    'hint.pack.ok': ('动画已就绪，点"下一步"继续安装。', 'Animation ready — click Next to continue.'),
     'hint.install': ('点"安装并试用一次"完成后会自动进入下一步',
                      'Click "Install and trial once" — the wizard advances when done'),
 

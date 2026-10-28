@@ -61,12 +61,15 @@ class Gui(object):
         self.settings = paths.load_settings()
         i18n.set_lang(self.settings.get('lang', i18n.DEFAULT_LANG))
 
-        self.root = tk.Tk()
+        # DPI 感知必须在创建 Tk 之前设置，否则界面在高分屏上被系统位图放大而发虚
         try:
             import ctypes
             ctypes.windll.shcore.SetProcessDpiAwareness(1)
         except Exception:
             pass
+        self.root = tk.Tk()
+        self._flex_labels = []          # 需要随窗口宽度自动换行的长文本标签
+        self._preview_path = ''
 
         self.log = paths.Logger(sink=self._log_append)
         self.q = queue.Queue()
@@ -81,7 +84,9 @@ class Gui(object):
 
         self._init_style()
         self._build()
+        self._on_resize()
         self.root.title('%s %s' % (i18n.t('app.title'), __version__))
+        self.root.bind('<Configure>', self._on_resize)
         self._show(0)
         self.root.after(80, self._poll)
         self.root.protocol('WM_DELETE_WINDOW', self._on_close)
@@ -99,14 +104,14 @@ class Gui(object):
         if not fam:
             fam = 'Segoe UI' if i18n.is_en() else 'Microsoft YaHei UI'
         try:
-            size = int(self.settings.get('font_size', 10)) + delta
+            size = int(self.settings.get('font_size', 16)) + delta
         except (TypeError, ValueError):
-            size = 10 + delta
+            size = 16 + delta
         return (fam, size, 'bold') if bold else (fam, size)
 
     def _mono(self):
         try:
-            size = max(8, int(self.settings.get('font_size', 10)) - 1)
+            size = max(9, int(self.settings.get('font_size', 16)) - 2)
         except (TypeError, ValueError):
             size = 9
         return ('Consolas', size)
@@ -159,9 +164,11 @@ class Gui(object):
         self.body = ttk.Frame(self.root, padding=16)
         self.body.pack(fill='both', expand=True)
         self.pages = []
+        self.body.columnconfigure(0, weight=1)
+        self.body.rowconfigure(0, weight=1)
         for builder in (self._page_welcome, self._page_check,
                         self._page_pack, self._page_install, self._page_done):
-            fr = ttk.Frame(self.body)
+            fr = ttk.Frame(self.body, width=1)   # 宽度交给容器，不被内容撑开
             builder(fr)
             self.pages.append(fr)
 
@@ -181,12 +188,50 @@ class Gui(object):
             side='left', padx=12)
         self._fit_window()
 
-    def _fit_window(self):
-        """按当前字体算出的需求尺寸调整窗口，避免放大字号后被裁切。"""
+    def _on_resize(self, ev=None):
+        """窗口宽度变化时，把长文本标签的换行宽度跟着改，避免大字号的窄条。"""
+        if ev is not None and ev.widget is not self.root:
+            return
+        w = (ev.width if ev is not None else self.root.winfo_width()) - 40
+        if w < 320:
+            return
+        for lb in list(getattr(self, '_flex_labels', [])):
+            try:
+                if lb.winfo_exists() and int(lb.cget('wraplength') or 0) != w:
+                    lb.configure(wraplength=w)
+            except Exception:
+                continue
+        self._last_flex_w = w
+
+    @staticmethod
+    def _work_area():
+        """屏幕可用区域（扣除任务栏），返回 (w, h)；取不到就退回 Tk 的屏幕尺寸。"""
+        try:
+            import ctypes
+
+            class RECT(ctypes.Structure):
+                _fields_ = [('left', ctypes.c_long), ('top', ctypes.c_long),
+                            ('right', ctypes.c_long), ('bottom', ctypes.c_long)]
+
+            r = RECT()
+            if ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(r), 0):
+                w, h = r.right - r.left, r.bottom - r.top
+                if w > 320 and h > 240:
+                    return w, h
+        except Exception:
+            pass
+        return 0, 0
+
+    def _fit_window(self, remember=False):
+        """按当前字号把窗口调大到刚好装下内容；超过屏幕可用区域则最大化。
+
+        用户手动改过的窗口大小会记在设置里，下次沿用。
+        """
         try:
             self.root.update_idletasks()
-            sw = self.root.winfo_screenwidth()
-            sh = self.root.winfo_screenheight()
+            aw, ah = self._work_area()
+            if not aw:
+                aw, ah = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
             # pack(expand=True) 会让 winfo_reqheight 失真，这里按各块实际需求相加
             chrome = 0
             for w in (self.head_frame, self.stepbar, self.nav_frame,
@@ -195,10 +240,44 @@ class Gui(object):
             page_h = max([p.winfo_reqheight() for p in self.pages] or [0])
             page_w = max([p.winfo_reqwidth() for p in self.pages] or [0])
             head_w = self.head_frame.winfo_reqwidth()
-            w = min(max(980, page_w + 40, head_w + 40, self.root.winfo_width()), sw - 40)
-            h = min(max(700, chrome + page_h + 40, self.root.winfo_height()), sh - 90)
-            self.root.geometry('%dx%d' % (w, h))
-            self.root.minsize(min(900, w), min(600, h))
+            need_w = max(page_w + 48, head_w + 48)
+            need_h = chrome + page_h + 72
+
+            try:
+                rem_w = int(self.settings.get('win_w') or 0)
+                rem_h = int(self.settings.get('win_h') or 0)
+            except (TypeError, ValueError):
+                rem_w = rem_h = 0
+
+            w = min(max(need_w, rem_w, 1280), aw - 24)
+            h = min(max(need_h, rem_h, 860), ah - 24)
+            self.root.minsize(min(need_w, aw - 24), min(need_h, ah - 24))
+            # 内容吃不下就最大化（比凭空超出屏幕好，标题栏也还看得见）
+            if need_w >= aw - 40 or need_h >= ah - 60:
+                if self.root.state() != 'zoomed':
+                    self.root.state('zoomed')
+            else:
+                if self.root.state() != 'normal':
+                    self.root.state('normal')
+                self.root.geometry('%dx%d' % (w, h))
+            self.root.update_idletasks()
+            # 二次校正：按控件实际需求再补高度，避免底部导航被裁掉
+            for _ in range(3):
+                if self.root.state() != 'normal':
+                    break
+                need2 = (self.body.winfo_reqheight()
+                         + chrome + 24)
+                cur = self.root.winfo_height()
+                if need2 <= cur + 2:
+                    break
+                cur_w = self.root.winfo_width()
+                self.root.geometry('%dx%d' % (cur_w, min(need2, ah - 24)))
+                self.root.update_idletasks()
+            self._on_resize()
+            if remember:
+                self.settings['win_w'] = w
+                self.settings['win_h'] = h
+                paths.save_settings(self.settings)
         except Exception:
             pass
 
@@ -215,13 +294,15 @@ class Gui(object):
         for i in (1, 2, 3):
             ttk.Label(box, text=i18n.t('p1.r%d.t' % i), style='H.TLabel').pack(
                 anchor='w', pady=(6, 2))
-            ttk.Label(box, text=i18n.t('p1.r%d.d' % i), justify='left',
-                      wraplength=860).pack(anchor='w')
+            lbl_r = ttk.Label(box, text=i18n.t('p1.r%d.d' % i), justify='left')
+            lbl_r.pack(anchor='w', fill='x')
+            self._flex_labels.append(lbl_r)
 
         self.var_banner = tk.StringVar(value='')
         self.lbl_banner = ttk.Label(fr, textvariable=self.var_banner, style='Warn.TLabel',
-                                    justify='left', wraplength=880)
-        self.lbl_banner.pack(anchor='w', pady=(12, 0))
+                                    justify='left')
+        self.lbl_banner.pack(anchor='w', fill='x', pady=(12, 0))
+        self._flex_labels.append(self.lbl_banner)
 
     # ------------------------------------------------------------------ #
     # 第 2 步：体检                                                       #
@@ -315,8 +396,10 @@ class Gui(object):
 
     def _page_pack(self, fr):
         ttk.Label(fr, text=i18n.t('p3.head'), style='H.TLabel').pack(anchor='w')
-        ttk.Label(fr, text=i18n.t('p3.tip'), style='Dim.TLabel', wraplength=880,
-                  justify='left').pack(anchor='w', pady=(4, 10))
+        lbl_tip = ttk.Label(fr, text=i18n.t('p3.tip'), style='Dim.TLabel',
+                            justify='left')
+        lbl_tip.pack(anchor='w', fill='x', pady=(4, 10))
+        self._flex_labels.append(lbl_tip)
 
         grid = ttk.Frame(fr)
         grid.pack(fill='x')
@@ -359,14 +442,17 @@ class Gui(object):
         self.pb = ttk.Progressbar(fr, mode='determinate')
         self.pb.pack(fill='x')
         self.var_pack = tk.StringVar(value=i18n.t('p3.idle'))
-        ttk.Label(fr, textvariable=self.var_pack, justify='left',
-                  wraplength=880).pack(anchor='w', pady=(8, 0))
+        lbl_done = ttk.Label(fr, textvariable=self.var_pack, justify='left')
+        lbl_done.pack(anchor='w', fill='x', pady=(8, 0))
+        self._flex_labels.append(lbl_done)
 
         self.preview_frame = ttk.LabelFrame(fr, text=i18n.t('p3.preview'), padding=8)
         self.preview_frame.pack(fill='both', expand=True, pady=(10, 0))
+        # 预览区自适应：Label 自己就是面板，图片按面板尺寸缩放
+        self.preview_box = self.preview_frame
         self.lbl_preview = ttk.Label(self.preview_frame, text=i18n.t('p3.preview.empty'),
-                                     style='Dim.TLabel')
-        self.lbl_preview.pack()
+                                     style='Dim.TLabel', anchor='center')
+        self.lbl_preview.pack(fill='both', expand=True)
 
     def _pick_dir(self):
         d = filedialog.askdirectory(title=i18n.t('p3.pickdir'))
@@ -437,11 +523,14 @@ class Gui(object):
 
     def _render_pack(self, r):
         self.anim_dir = os.path.dirname(r['anim'])
+        self._preview_path = r['anim']
         self.var_pack.set(i18n.t('p3.done', r['frames'], r['width'], r['height'], r['fps'],
                                  r['fmt'], r['size_mb'], r['elapsed'], r['anim']))
         if r.get('warn'):
             self.var_pack.set(self.var_pack.get() + '\n' + r['warn'])
         self._show_preview(r['anim'])
+        # 制作成功即解锁“下一步”（0.1.1 的 bug：这里没刷新按钮，导致做完动画仍灰着）
+        self._refresh_buttons()
 
     def _show_preview(self, anim_path):
         try:
@@ -449,13 +538,52 @@ class Gui(object):
         except ImportError:
             return
         try:
-            im = pack.read_frame(anim_path, 0)
-            im.thumbnail((640, 360))
+            im = self._pick_preview_frame(anim_path)
+            self.preview_size = (self.preview_box.winfo_width(), self.preview_box.winfo_height())
+            iw, ih = im.size
+            if iw and ih:
+                # 按面板可用空间等比缩放，高分屏/大字号下也能看清
+                w = max(160, (self.preview_box.winfo_width() or 640) - 24)
+                h = max(120, (self.preview_box.winfo_height() or 360) - 24)
+                k = min(w / float(iw), h / float(ih))
+                im = im.resize((max(1, int(iw * k)), max(1, int(ih * k))))
             self.photo = ImageTk.PhotoImage(im)
             self.lbl_preview.configure(image=self.photo, text='')
+            if not getattr(self, '_preview_deferred', False):
+                self._preview_deferred = True
+                self.root.after(250, self._repreview)
         except Exception as e:
             self.log('[gui] 预览失败：%s' % e)
             self.lbl_preview.configure(text=i18n.t('p3.preview.fail'))
+
+    @staticmethod
+    def _pick_preview_frame(anim_path):
+        """挑一张“看得见”的首帧：动画常以黑场/淡入开场，直接取第 0 帧是一条黑框。
+
+        先取第 0 帧，若几乎全黑就往后跳着找，最多看 12 个候选；都黑就还是用第 0 帧。
+        """
+        im = pack.read_frame(anim_path, 0)
+        try:
+            total = pack.frame_count(anim_path) or 1
+        except Exception:
+            total = 1
+        if total <= 1 or not _is_blank(im):
+            return im
+        step = max(1, total // 12)
+        for i in range(step, total, step):
+            try:
+                cand = pack.read_frame(anim_path, i)
+            except Exception:
+                break
+            if not _is_blank(cand):
+                return cand
+        return im
+
+    def _repreview(self, path=None):
+        """窗口尺寸变化后按新面板大小重绘首帧预览。"""
+        p = path or getattr(self, '_preview_path', None)
+        if p and os.path.isfile(p):
+            self._show_preview(p)
 
     # ------------------------------------------------------------------ #
     # 第 4 步：安装（试用）                                               #
@@ -467,12 +595,15 @@ class Gui(object):
         plan = ttk.LabelFrame(fr, text=i18n.t('p4.plan'), padding=10)
         plan.pack(fill='x')
         for k in ('p4.l1', 'p4.l2', 'p4.l3', 'p4.l4'):
-            ttk.Label(plan, text=i18n.t(k), justify='left', wraplength=860).pack(
-                anchor='w', pady=1)
+            lbl_p = ttk.Label(plan, text=i18n.t(k), justify='left')
+            lbl_p.pack(anchor='w', fill='x', pady=1)
+            self._flex_labels.append(lbl_p)
 
         self.var_plan = tk.StringVar(value=i18n.t('p4.need.pack'))
-        ttk.Label(fr, textvariable=self.var_plan, justify='left', wraplength=880,
-                  style='Dim.TLabel').pack(anchor='w', pady=(10, 6))
+        lbl_plan = ttk.Label(fr, textvariable=self.var_plan, justify='left',
+                            style='Dim.TLabel')
+        lbl_plan.pack(anchor='w', fill='x', pady=(10, 6))
+        self._flex_labels.append(lbl_plan)
 
         self.var_agree = tk.BooleanVar(value=False)
         ttk.Checkbutton(fr, text=i18n.t('p4.agree'), variable=self.var_agree,
@@ -558,8 +689,9 @@ class Gui(object):
     def _page_done(self, fr):
         ttk.Label(fr, text=i18n.t('p5.head'), style='H.TLabel').pack(anchor='w')
         self.var_state = tk.StringVar(value=i18n.t('p5.reading'))
-        ttk.Label(fr, textvariable=self.var_state, justify='left', wraplength=880
-                  ).pack(anchor='w', pady=(8, 10))
+        lbl_state = ttk.Label(fr, textvariable=self.var_state, justify='left')
+        lbl_state.pack(anchor='w', fill='x', pady=(8, 10))
+        self._flex_labels.append(lbl_state)
 
         row = ttk.Frame(fr)
         row.pack(fill='x')
@@ -572,8 +704,9 @@ class Gui(object):
 
         box = ttk.LabelFrame(fr, text=i18n.t('p5.trouble'), padding=10)
         box.pack(fill='x', pady=(14, 0))
-        ttk.Label(box, justify='left', wraplength=860,
-                  text=i18n.t('p5.trouble.body')).pack(anchor='w')
+        lbl_tb = ttk.Label(box, justify='left', text=i18n.t('p5.trouble.body'))
+        lbl_tb.pack(anchor='w', fill='x')
+        self._flex_labels.append(lbl_tb)
 
         self.txt_state = tk.Text(fr, height=8, wrap='word', font=self._mono(),
                                  relief='solid', borderwidth=1)
@@ -688,7 +821,7 @@ class Gui(object):
         cb_font.grid(row=1, column=1, sticky='we', pady=6)
 
         ttk.Label(fr, text=i18n.t('set.size')).grid(row=2, column=0, sticky='w', pady=6)
-        ttk.Spinbox(fr, from_=9, to=16, textvariable=var_size, width=6).grid(
+        ttk.Spinbox(fr, from_=10, to=28, textvariable=var_size, width=6).grid(
             row=2, column=1, sticky='w', pady=6)
 
         ttk.Label(fr, text=i18n.t('set.note'), style='Dim.TLabel', wraplength=420,
@@ -797,9 +930,9 @@ class Gui(object):
         self.step = i
         for k, fr in enumerate(self.pages):
             if k == i:
-                fr.pack(fill='both', expand=True)
+                fr.grid(row=0, column=0, sticky='nsew')
             else:
-                fr.pack_forget()
+                fr.grid_remove()
         for k, lb in enumerate(self.step_labels):
             lb.configure(style='H.TLabel' if k == i else 'Dim.TLabel')
         self.btn_back.config(state='normal' if i > 0 else 'disabled')
@@ -824,6 +957,8 @@ class Gui(object):
             if not self.anim_dir:
                 can_next = False
                 hint = i18n.t('hint.pack')
+            else:
+                hint = i18n.t('hint.pack.ok')
         elif self.step == 3:
             can_next = False
             hint = i18n.t('hint.install')
@@ -941,10 +1076,26 @@ class Gui(object):
                 self.var_banner.set(i18n.t('banner.inactive', st.get('guid')))
 
     def _on_close(self):
+        self._remember_geometry()
         try:
             self.log.close()
         finally:
             self.root.destroy()
+
+    def _remember_geometry(self):
+        """记下用户当前的窗口大小，下次启动沿用（忽略最大化时的屏幕尺寸）。"""
+        try:
+            if self.root.state() == 'normal':
+                w = self.root.winfo_width()
+                h = self.root.winfo_height()
+                sw = self.root.winfo_screenwidth()
+                sh = self.root.winfo_screenheight()
+                if w >= 800 and h >= 560 and not (w >= sw - 20 and h >= sh - 60):
+                    self.settings['win_w'] = w
+                    self.settings['win_h'] = h
+                    paths.save_settings(self.settings)
+        except Exception:
+            pass
 
     def run(self):
         self.root.mainloop()
@@ -961,6 +1112,17 @@ def _font_families(root):
     head = [f for f in PREFERRED_FONTS if f in fams]
     rest = sorted(fams - set(head), key=lambda s: s.lower())
     return head + rest
+
+
+def _is_blank(im):
+    """近乎纯色（黑场/白场）的帧不适合当缩略图。"""
+    try:
+        small = im.convert('L').resize((32, 18))
+        data = list(small.getdata())
+        lo, hi = min(data), max(data)
+        return (hi - lo) < 8
+    except Exception:
+        return False
 
 
 def run(show_notice=True):
