@@ -30,6 +30,7 @@ tools/         打包与辅助脚本（GUI / CLI / BMP 扫描）
 wizard/        图形安装向导（Python + tkinter，打包成单文件 exe）
 docs/          设计文档 / VM 测试报告 / 真机部署与回滚指南 / 构建指南 / 使用指南
 example/       config.ini 示例
+Example video/ P3可导入示例视频
 ```
 
 > 预编译 `BootAnimation.efi` 与示例动画包 `anim.bin` 不入 Git 仓库，
